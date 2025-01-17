@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -7,3 +8,4 @@ class Expense(db.Model):
     description = db.Column(db.String(200), nullable=False)
     category = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    date = db.Column(db.Date, default=datetime.utcnow)  # Add date field

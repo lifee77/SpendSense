@@ -5,9 +5,11 @@ const ReceiptUploader = () => {
   const [file, setFile] = useState(null);
   const [classification, setClassification] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
+    setError("");
   };
 
   const handleUpload = async () => {
@@ -20,20 +22,32 @@ const ReceiptUploader = () => {
     formData.append("receipt_image", file);
 
     try {
-      const response = await axios.post("/classify", formData);
-      setClassification(response.data.summary); // Assuming `summary` is returned
+      setLoading(true);
       setError("");
+      const response = await axios.post("/classify", formData);
+
+      if (response.data.error) {
+        setError(response.data.error);
+      } else {
+        setClassification(response.data.summary); // Assuming `summary` is returned.
+      }
     } catch (err) {
       setError("Failed to classify receipt. Please try again.");
+      console.error("Error during upload:", err.response || err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h2>Upload Receipt</h2>
+    <div className="receipt-uploader">
+      <h2>Upload Your Receipt</h2>
       <input type="file" onChange={handleFileChange} />
-      <button onClick={handleUpload}>Upload</button>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      <button onClick={handleUpload} disabled={loading}>
+        {loading ? "Uploading..." : "Upload"}
+      </button>
+      {error && <p className="error">{error}</p>}
+      {loading && <p>Processing your receipt...</p>}
       {classification && (
         <div>
           <h3>Classification Result</h3>
