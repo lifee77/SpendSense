@@ -8,12 +8,20 @@ import requests
 import base64
 import logging
 import certifi
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import os
+from datetime import datetime, timedelta
+
+# Set up SSL certificates
+os.environ['SSL_CERT_FILE'] = certifi.where()
 
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 app.config.from_object(Config)
 db.init_app(app)
+app.config['DEBUG'] = True
 
 # Initialize database tables
 with app.app_context():
@@ -26,11 +34,23 @@ NVIDIA_API_URL = "https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-11b-vision-inst
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Helper function for a session with retries
+def create_requests_session():
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=5,  # Total retries
+        backoff_factor=1,  # Exponential backoff (1s, 2s, 4s, etc.)
+        status_forcelist=[429, 500, 502, 503, 504],  # Retry on these HTTP codes
+        allowed_methods=["POST"]  # Retry only on POST requests
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.verify = certifi.where()  # Use certifi for SSL
+    return session
+
 @app.route('/')
 def welcome():
     return 'Welcome to the SpendSense Flask application!'
-
-from datetime import datetime, timedelta
 
 @app.route('/classify', methods=['POST'])
 def classify_receipt():
@@ -44,13 +64,17 @@ def classify_receipt():
         # Encode image to Base64
         image_b64 = base64.b64encode(receipt_image.read()).decode()
 
+        # Ensure the image size is within the limit
+        if len(image_b64) >= 180_000:
+            return jsonify({'error': 'Image size too large. Use the assets API for larger uploads.'}), 400
+
         # Prepare NVIDIA API payload
         payload = {
             "model": 'meta/llama-3.2-11b-vision-instruct',
             "messages": [
                 {
                     "role": "user",
-                    "content": f'''
+                    "content": f"""
 Classify all items in this receipt into strictly these categories:
 
 Produce: Fruits, vegetables, fresh herbs.
@@ -66,9 +90,8 @@ Personal Care: Shampoo, soap, toothpaste.
 Other: Miscellaneous items (pet food, specialty items).
 
 Also, sum up expenses in each category.
-Write the date in the format YYYY-MM-DD.
-Here is the image: <img src="data:image/png;base64,{image_b64}" />
-                    '''
+Write the date in the format YYYY-MM-DD. <img src=\"data:image/png;base64,{image_b64}\" />
+                    """
                 }
             ],
             "max_tokens": 512,
@@ -81,24 +104,25 @@ Here is the image: <img src="data:image/png;base64,{image_b64}" />
             "Authorization": f"Bearer {Config.NVIDIA_API_KEY}",
             "Accept": "application/json"
         }
-        response = requests.post(NVIDIA_API_URL, headers=headers, json=payload, verify=False, timeout=120)
-
-        # Retry mechanism
-        retry_count = 3
-        while response.status_code != 200 and retry_count > 0:
-            logger.warning("Retrying NVIDIA API request...")
-            response = requests.post(NVIDIA_API_URL, headers=headers, json=payload)
-            retry_count -= 1
+        session = create_requests_session()
+        response = session.post(NVIDIA_API_URL, headers=headers, json=payload, timeout=120)
 
         if response.status_code != 200:
-            logger.error("Failed to classify receipt")
-            return jsonify({'error': 'Failed to classify receipt', 'details': response.json()}), 500
+            logger.error(f"Failed to classify receipt: {response.status_code}, {response.text}")
+            return jsonify({'error': 'Failed to classify receipt', 'details': response.text}), response.status_code
 
         # Parse API response
         api_result = response.json()
         categorized_expenses = api_result.get('choices', [{}])[0].get('message', {}).get('content', '')
 
-        # Extract categorized items and totals
+        # Validate and extract categorized items and totals
+        if not categorized_expenses:
+            logger.error("Received empty response from NVIDIA API")
+            return jsonify({'error': 'Received empty response from NVIDIA API'}), 500
+
+        # Debug raw data
+        logger.info(f"Categorized Expenses Raw Data: {categorized_expenses}")
+
         results = parse_categorization(categorized_expenses)
 
         # Store results in the database
@@ -107,9 +131,9 @@ Here is the image: <img src="data:image/png;base64,{image_b64}" />
             for item in items:
                 db.session.add(
                     Expense(
-                        description=item['description'],
+                        description=item.get('description', 'Unknown item'),
                         category=category,
-                        amount=item['amount'],
+                        amount=item.get('amount', 0.0),
                         date=today
                     )
                 )
@@ -117,6 +141,12 @@ Here is the image: <img src="data:image/png;base64,{image_b64}" />
 
         return jsonify({'message': 'Receipt classified and stored successfully', 'summary': results['totals']})
 
+    except requests.exceptions.SSLError as e:
+        logger.error(f"SSL Error: {e}")
+        return jsonify({'error': 'SSL error occurred'}), 500
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request Error: {e}")
+        return jsonify({'error': 'Request failed'}), 500
     except Exception as e:
         logger.exception("An error occurred while processing the receipt")
         return jsonify({'error': 'An internal error occurred'}), 500
@@ -138,7 +168,6 @@ def dashboard():
     except Exception as e:
         logger.exception("An error occurred while fetching the dashboard")
         return jsonify({'error': 'Failed to fetch dashboard data'}), 500
-
 
 if __name__ == '__main__':
     app.run(debug=True)
