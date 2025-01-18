@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import axios from "../api";
+import ExpenseSummary from "./ExpenseSummary";
+import Loader from "./Loader";
 
 const ReceiptUploader = () => {
   const [file, setFile] = useState(null);
@@ -10,6 +12,7 @@ const ReceiptUploader = () => {
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setError("");
+    setClassification(null); // Reset classification when a new file is uploaded
   };
 
   const handleUpload = async () => {
@@ -42,24 +45,17 @@ const ReceiptUploader = () => {
   return (
     <div className="receipt-uploader">
       <h2>Upload Your Receipt</h2>
-      <input type="file" onChange={handleFileChange} />
+      <input
+        type="file"
+        accept="image/png, image/jpeg"
+        onChange={handleFileChange}
+      />
       <button onClick={handleUpload} disabled={loading}>
         {loading ? "Uploading..." : "Upload"}
       </button>
       {error && <p className="error">{error}</p>}
-      {loading && <p>Processing your receipt...</p>}
-      {classification && (
-        <div>
-          <h3>Classification Result</h3>
-          <ul>
-            {Object.keys(classification).map((category) => (
-              <li key={category}>
-                {category}: ${classification[category].toFixed(2)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {loading && <Loader />}
+      {classification && <ExpenseSummary classification={classification} />}
     </div>
   );
 };

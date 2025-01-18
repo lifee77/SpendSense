@@ -3,7 +3,10 @@ import React from "react";
 const ExpenseSummary = ({ classification }) => {
   if (!classification) return null;
 
-  const total = Object.values(classification).reduce((sum, value) => sum + value, 0);
+  const total = Object.values(classification).reduce(
+    (sum, value) => sum + value,
+    0
+  );
 
   return (
     <div className="expense-summary">

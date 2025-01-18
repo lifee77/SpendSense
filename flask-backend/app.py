@@ -12,6 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os
 from datetime import datetime, timedelta
+import json
 
 # Set up SSL certificates
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -26,9 +27,6 @@ app.config['DEBUG'] = True
 # Initialize database tables
 with app.app_context():
     db.create_all()
-
-# NVIDIA API Configuration
-NVIDIA_API_URL = "https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-11b-vision-instruct/chat/completions"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +48,7 @@ def create_requests_session():
 
 @app.route('/')
 def welcome():
-    return 'Welcome to the SpendSense Flask application!'
+    return 'Welcome to the SpendSense Flask application! Visit /classify to classify a receipt or /dashboard to view the dashboard in the frontend.'
 
 @app.route('/classify', methods=['POST'])
 def classify_receipt():
@@ -64,9 +62,6 @@ def classify_receipt():
         # Encode image to Base64
         image_b64 = base64.b64encode(receipt_image.read()).decode()
 
-        # Ensure the image size is within the limit
-        if len(image_b64) >= 180_000:
-            return jsonify({'error': 'Image size too large. Use the assets API for larger uploads.'}), 400
 
         # Prepare NVIDIA API payload
         payload = {
@@ -76,22 +71,54 @@ def classify_receipt():
                     "role": "user",
                     "content": f"""
 Classify all items in this receipt into strictly these categories:
+- Produce: Fruits, vegetables, fresh herbs.
+- Dairy: Milk, cheese, yogurt, butter.
+- Meat & Seafood: Chicken, beef, fish, shrimp.
+- Pantry Staples: Rice, pasta, flour, sugar, spices.
+- Snacks: Chips, nuts, chocolates.
+- Beverages: Coffee, tea, juices, soft drinks.
+- Frozen Items: Ice cream, frozen meals, frozen vegetables.
+- Bakery: Bread, rolls, pastries.
+- Household Supplies: Cleaning products, paper towels, detergents.
+- Personal Care: Shampoo, soap, toothpaste.
+- Electronics & Appliances: Phones, chargers, small appliances, batteries.
+- Clothing & Accessories: Shirts, shoes, belts, hats.
+- Furniture & Home Decor: Chairs, tables, lamps, curtains.
+- Toys & Games: Children's toys, board games, video games.
+- Books & Stationery: Books, notebooks, pens, markers.
+- Pet Supplies: Pet food, toys, grooming products.
+- Pharmacy & Health: Medicines, vitamins, first-aid items.
+- Automotive: Car maintenance supplies, oil, wipers.
+- Garden & Outdoor: Plants, seeds, garden tools.
+- Sporting Goods: Sports equipment, workout gear, bikes.
+- Entertainment: DVDs, music, streaming gift cards.
+- Office Supplies: Printers, paper, office chairs.
+- Gifts & Party Supplies: Wrapping paper, greeting cards, balloons.
+- Luxury Items: Jewelry, watches, designer products.
+- Transportation: Bus/train passes, parking fees, tolls.
+- Other: Miscellaneous items not listed above.
 
-Produce: Fruits, vegetables, fresh herbs.
-Dairy: Milk, cheese, yogurt, butter.
-Meat & Seafood: Chicken, beef, fish, shrimp.
-Pantry Staples: Rice, pasta, flour, sugar, spices.
-Snacks: Chips, nuts, chocolates.
-Beverages: Coffee, tea, juices, soft drinks.
-Frozen Items: Ice cream, frozen meals, frozen vegetables.
-Bakery: Bread, rolls, pastries.
-Household Supplies: Cleaning products, paper towels, detergents.
-Personal Care: Shampoo, soap, toothpaste.
-Other: Miscellaneous items (pet food, specialty items).
+Return the output **strictly as a JSON object** in this format:
 
-Also, sum up expenses in each category.
-Write the date in the format YYYY-MM-DD. <img src=\"data:image/png;base64,{image_b64}\" />
-                    """
+{{
+  "items": {{
+    "Produce": [
+      {{"description": "Banana", "amount": 1.50}},
+      {{"description": "Apples", "amount": 2.00}}
+    ],
+    "Dairy": [
+      {{"description": "Milk", "amount": 3.50}}
+    ]
+  }},
+  "totals": {{
+    "Produce": 3.50,
+    "Dairy": 3.50
+  }},
+  "date": "YYYY-MM-DD"
+}}
+
+Do not include any additional text or explanations either at the beginning or at the end. Only return the JSON object. <img src=\"data:image/png;base64,{image_b64}\" />
+"""
                 }
             ],
             "max_tokens": 512,
@@ -105,7 +132,7 @@ Write the date in the format YYYY-MM-DD. <img src=\"data:image/png;base64,{image
             "Accept": "application/json"
         }
         session = create_requests_session()
-        response = session.post(NVIDIA_API_URL, headers=headers, json=payload, timeout=120)
+        response = session.post(Config.NVIDIA_API_URL, headers=headers, json=payload, timeout=120)
 
         if response.status_code != 200:
             logger.error(f"Failed to classify receipt: {response.status_code}, {response.text}")
@@ -113,17 +140,24 @@ Write the date in the format YYYY-MM-DD. <img src=\"data:image/png;base64,{image
 
         # Parse API response
         api_result = response.json()
-        categorized_expenses = api_result.get('choices', [{}])[0].get('message', {}).get('content', '')
+        categorized_expenses_raw = api_result.get('choices', [{}])[0].get('message', {}).get('content', '')
 
-        # Validate and extract categorized items and totals
-        if not categorized_expenses:
+        if not categorized_expenses_raw:
             logger.error("Received empty response from NVIDIA API")
             return jsonify({'error': 'Received empty response from NVIDIA API'}), 500
 
         # Debug raw data
-        logger.info(f"Categorized Expenses Raw Data: {categorized_expenses}")
+        logger.info(f"Categorized Expenses Raw Data: {categorized_expenses_raw}")
 
-        results = parse_categorization(categorized_expenses)
+        # Extract JSON part from the response
+        try:
+            json_start = categorized_expenses_raw.index("{")
+            json_end = categorized_expenses_raw.rindex("}") + 1
+            categorized_expenses = categorized_expenses_raw[json_start:json_end]
+            results = json.loads(categorized_expenses)
+        except (ValueError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to extract or decode JSON: {e}")
+            return jsonify({'error': 'Failed to process the NVIDIA API response'}), 500
 
         # Store results in the database
         today = datetime.utcnow()

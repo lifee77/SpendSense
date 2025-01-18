@@ -7,3 +7,4 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv('SUPABASE_URL', 'sqlite:///db.sqlite3')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY')
+    NVIDIA_API_URL = "https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-11b-vision-instruct/chat/completions"

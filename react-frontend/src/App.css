@@ -111,3 +111,100 @@ ul li {
   font-weight: bold;
   margin-top: 10px;
 }
+
+/* Additional Styles */
+
+/* Header and Footer Styling */
+header {
+  background-color: #4caf50;
+  color: white;
+  padding: 10px 0;
+  text-align: center;
+  border-radius: 10px 10px 0 0;
+}
+
+footer {
+  margin-top: 20px;
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Input Styling */
+input[type="file"] {
+  border: 1px solid #ccc;
+  padding: 8px;
+  border-radius: 5px;
+  width: calc(100% - 20px);
+  max-width: 300px;
+  margin: 10px auto;
+  display: block;
+  font-size: 14px;
+}
+
+/* Receipt Uploader Enhancements */
+.receipt-uploader h2 {
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 20px;
+}
+
+/* Dashboard Section Styling */
+.dashboard h2 {
+  margin-bottom: 15px;
+  font-size: 22px;
+  color: #333;
+}
+
+.dashboard ul {
+  padding: 0;
+  margin: 10px 0;
+}
+
+.dashboard ul li {
+  padding: 8px 12px;
+  background-color: #fff;
+  margin: 5px 0;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Hover Effect for List Items */
+.dashboard ul li:hover {
+  background-color: #f9f9f9;
+  border-color: #ccc;
+}
+
+/* Error Message Styling */
+.error {
+  margin-top: 10px;
+  color: #d9534f;
+  font-size: 14px;
+}
+
+/* Loader Centering */
+.loader {
+  display: block;
+  margin: 20px auto;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .App {
+    padding: 10px;
+  }
+
+  button {
+    width: 100%;
+    padding: 10px;
+  }
+
+  input[type="file"] {
+    width: 100%;
+  }
+
+  .dashboard ul li {
+    font-size: 14px;
+  }
+}

@@ -31,7 +31,7 @@ const Dashboard = () => {
         <ul>
           {Object.keys(summary).map((category) => (
             <li key={category}>
-              {category}: ${summary[category].toFixed(2)}
+              <strong>{category}</strong>: ${summary[category].toFixed(2)}
             </li>
           ))}
         </ul>

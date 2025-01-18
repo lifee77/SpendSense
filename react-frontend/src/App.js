@@ -6,9 +6,16 @@ import "./App.css";
 const App = () => {
   return (
     <div className="App">
-      <h1>Receipt Classifier</h1>
-      <ReceiptUploader />
-      <Dashboard />
+      <header>
+        <h1>Receipt Classifier</h1>
+      </header>
+      <main>
+        <ReceiptUploader />
+        <Dashboard />
+      </main>
+      <footer>
+        <p>&copy; 2025 SpendSense</p>
+      </footer>
     </div>
   );
 };
